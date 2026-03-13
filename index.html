@@ -1,9 +1,358 @@
-<html>
+<!DOCTYPE html>
+<html lang="ja">
 <head>
-    <title>Kitchen Crisis Lookup</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Crisis 料理逆引き表</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
+        .container { max-width: 950px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        
+        /* ヘッダー */
+        .app-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .app-header h1 { margin: 0; font-size: 24px; color: #222; }
+        .app-header .handle { font-size: 14px; color: #666; margin-top: 5px; }
+
+        /* 素材ボタンエリア */
+        .section-title { font-size: 14px; font-weight: bold; margin-bottom: 12px; color: #555; border-left: 4px solid #ccc; padding-left: 8px; }
+        .ingredient-group-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .ing-btn { 
+            width: 110px; height: 40px; border: 1px solid #ddd; border-radius: 6px; 
+            cursor: pointer; font-size: 13px; text-align: center;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; background-color: #fff;
+        }
+        .ing-btn:hover { border-color: #999; }
+        .ing-btn.active { outline: 3px solid #007bff; border-color: transparent; font-weight: bold; z-index: 1; }
+
+        /* フィルタオプション */
+        .filter-options { display: flex; gap: 20px; margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 8px; font-size: 13px; border: 1px solid #eee; }
+        .filter-options label { cursor: pointer; display: flex; align-items: center; gap: 5px; }
+
+        /* 選択中エリア */
+        .selected-area { display: flex; align-items: center; gap: 10px; margin-bottom: 25px; min-height: 45px; padding: 8px; border-bottom: 2px solid #f0f0f0; }
+        .selected-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; border: 1px solid rgba(0,0,0,0.1); font-weight: bold; }
+        .clear-btn { padding: 6px 18px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .clear-btn:hover { background: #c0392b; }
+
+        /* 料理リスト */
+        .dish-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+        .dish-card { display: flex; align-items: flex-start; padding: 12px; border-radius: 10px; border: 1px solid #eee; background: #fff; }
+        .rank-badge { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 12px; flex-shrink: 0; font-size: 13px; border: 1px solid rgba(0,0,0,0.05); }
+        .dish-info { flex-grow: 1; }
+        .dish-name { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #222; }
+        .dish-ings { font-size: 12px; color: #666; line-height: 1.6; }
+        .highlight { background-color: #ffeb3b; color: #000; padding: 1px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #fbc02d; }
+
+        /* 素材カラー設定 */
+        .bg-yellow { background-color: #FFF9C4; }
+        .bg-gray { background-color: #F5F5F5; }
+        .bg-red { background-color: #FFEBEE; }
+        .bg-blue { background-color: #E3F2FD; }
+        .bg-green-dark { background-color: #C8E6C9; } /* じゃがいも/にんじん両方これを使用 */
+        .bg-purple { background-color: #F3E5F5; }
+        .bg-brown { background-color: #EFEBE9; }
+
+        /* ランクカラー */
+        .rank-r5 { background-color: #FFE0B2; }
+        .rank-r4 { background-color: #FCE4EC; }
+        .rank-r3 { background-color: #E0F7FA; }
+        .rank-r2 { background-color: #E8F5E9; }
+    </style>
 </head>
 <body>
-    <h1>Welcome to Kitchen Crisis Lookup</h1>
-    <p>This is your one-stop solution for all kitchen-related queries!</p>
+
+<div class="container">
+    <div class="app-header">
+        <h1>Kitchen Crisis 料理逆引き表</h1>
+        <div class="handle">@Sp1nachGaming</div>
+    </div>
+
+    <div class="section-title">素材を選択</div>
+    <div id="ingredient-container"></div>
+
+    <div class="filter-options">
+        <label><input type="checkbox" class="hide-filter" value="3"> 素材3つ以下を非表示</label>
+        <label><input type="checkbox" class="hide-filter" value="4"> 素材4つ以下を非表示</label>
+        <label><input type="checkbox" class="hide-filter" value="5"> 素材5つ以下を非表示</label>
+    </div>
+
+    <div class="section-title">選択中の素材</div>
+    <div class="selected-area">
+        <div id="selected-icons" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+        <button id="clear-btn" class="clear-btn">クリア</button>
+    </div>
+
+    <div id="dish-list" class="dish-list"></div>
+</div>
+
+<script>
+// 素材グループ定義（色の統合）
+const ingredientGroups = [
+    { color: 'bg-yellow', items: ['小麦粉', 'パン', '麺', '米'] },
+    { color: 'bg-gray', items: ['卵', 'バター', 'チーズ'] },
+    { color: 'bg-red', items: ['肉', '鶏肉'] },
+    { color: 'bg-blue', items: ['魚', 'エビ', '海苔'] },
+    { color: 'bg-green-dark', items: ['じゃがいも', 'レタス', 'トマト', '玉ねぎ'] },
+    { color: 'bg-green-dark', items: ['にんじん', 'キノコ', 'ニンニク'] }, // じゃがいもと同じ色
+    { color: 'bg-purple', items: ['パイナップル'] },
+    { color: 'bg-brown', items: ['カレー粉', '唐辛子'] }
+];
+
+// ソート用のマスタ順序リストを作成
+const ingredientMasterOrder = ingredientGroups.flatMap(g => g.items);
+
+const dishes = [
+    { rank: 'R5', name: 'カレーチキンバーガー', ingredients: ['パン', 'カレー粉', 'チーズ', 'レタス', '玉ねぎ', 'トマト', '鶏肉'] },
+    { rank: 'R5', name: 'サーモンバーガー', ingredients: ['パン', 'チーズ', 'レタス', '玉ねぎ', 'トマト', '魚'] },
+    { rank: 'R5', name: 'チーズタッカルビ炒飯', ingredients: ['米', 'チーズ', '玉ねぎ', '海苔', '鶏肉', '唐辛子'] },
+    { rank: 'R5', name: '鶏肉入り焼うどん', ingredients: ['麺', 'バター', '鶏肉', 'キノコ', '玉ねぎ', '唐辛子', '海苔'] },
+    { rank: 'R5', name: 'チキンバーガーセット', ingredients: ['パン', 'チーズ', 'レタス', 'トマト', '鶏肉', 'じゃがいも'] },
+    { rank: 'R5', name: 'コンビネーションピザ', ingredients: ['チーズ', '肉', 'キノコ', 'じゃがいも', 'トマト', '小麦粉'] },
+    { rank: 'R5', name: 'トンポーロー', ingredients: ['肉', 'ニンニク', 'レタス', '玉ねぎ', 'じゃがいも'] },
+    { rank: 'R5', name: '魚のプラッター', ingredients: ['魚', '米', 'レタス'] },
+    { rank: 'R4', name: 'カレーピザ', ingredients: ['カレー粉', 'チーズ', '鶏肉', 'キノコ', '玉ねぎ', '小麦粉'] },
+    { rank: 'R4', name: '野菜スープカレー', ingredients: ['カレー粉', 'にんじん', '玉ねぎ', 'キノコ', '唐辛子'] },
+    { rank: 'R4', name: 'エッグインヘル', ingredients: ['チーズ', 'ニンニク', '玉ねぎ', '唐辛子', 'トマト', '卵'] },
+    { rank: 'R4', name: 'パイナップルチキンカレー', ingredients: ['カレー粉', '鶏肉', 'パイナップル', 'じゃがいも', 'トマト'] },
+    { rank: 'R4', name: 'パイナップル炒飯', ingredients: ['米', '玉ねぎ', 'キノコ', 'パイナップル', '卵', 'エビ'] },
+    { rank: 'R4', name: '揚げ野菜', ingredients: ['にんじん', 'レタス', '玉ねぎ', '唐辛子', '卵', '小麦粉'] },
+    { rank: 'R4', name: 'ソーセージ・フリッタータ', ingredients: ['にんじん', 'チーズ', 'じゃがいも', '卵', '肉'] },
+    { rank: 'R4', name: 'ステーク・フリッツ', ingredients: ['レタス', '玉ねぎ', 'トマト', 'じゃがいも', '肉'] },
+    { rank: 'R4', name: 'エビバーガー', ingredients: ['パン', 'チーズ', 'レタス', '玉ねぎ', 'トマト', 'エビ'] },
+    { rank: 'R4', name: 'アヒージョ', ingredients: ['パン', 'ニンニク', 'キノコ', '唐辛子', 'エビ'] },
+    { rank: 'R4', name: 'サバパスタ', ingredients: ['麺', '玉ねぎ', '唐辛子', '魚'] },
+    { rank: 'R4', name: 'チーズとんかつ定食', ingredients: ['米', 'チーズ', 'レタス', '海苔', '肉'] },
+    { rank: 'R4', name: 'スペシャルうどん', ingredients: ['キノコ', '卵', 'エビ', '海苔', '麺', '肉'] },
+    { rank: 'R4', name: 'チキンオーブンパスタ', ingredients: ['チーズ', '鶏肉', '玉ねぎ', 'トマト', '麺'] },
+    { rank: 'R4', name: 'チーズとんかつうどん', ingredients: ['チーズ', 'キノコ', '卵', '海苔', '麺', '肉'] },
+    { rank: 'R4', name: 'ピザパン', ingredients: ['パン', 'バター', 'チーズ', '肉', 'キノコ', 'トマト', '卵'] },
+    { rank: 'R4', name: 'カレーコロッケ', ingredients: ['バター', 'カレー粉', '玉ねぎ', 'じゃがいも', '卵', 'パン'] },
+    { rank: 'R4', name: 'タンドリーチキン', ingredients: ['バター', 'カレー粉', '鶏肉', '玉ねぎ', '唐辛子', 'トマト'] },
+    { rank: 'R4', name: 'タッカルビ炒飯', ingredients: ['米', '玉ねぎ', '海苔', '鶏肉', '唐辛子'] },
+    { rank: 'R4', name: 'チキンバーガー', ingredients: ['パン', 'チーズ', 'レタス', 'トマト', '鶏肉'] },
+    { rank: 'R4', name: 'ビーフカレー', ingredients: ['カレー粉', 'にんじん', '肉', 'じゃがいも', 'トマト'] },
+    { rank: 'R4', name: '酢豚', ingredients: ['にんじん', 'レタス', 'パイナップル', '肉'] },
+    { rank: 'R4', name: 'フィッシュカレー', ingredients: ['カレー粉', 'にんじん', '魚', 'じゃがいも', 'トマト', 'エビ'] },
+    { rank: 'R4', name: 'スパゲッティサラダ', ingredients: ['麺', 'レタス', 'トマト', '鶏肉'] },
+    { rank: 'R4', name: 'ハンバーガー', ingredients: ['パン', 'チーズ', 'レタス', 'トマト', '肉'] },
+    { rank: 'R3', name: '餃子', ingredients: ['レタス', '肉', '小麦粉'] },
+    { rank: 'R3', name: '餃子入りラーメン', ingredients: ['レタス', '肉', '小麦粉', '麺'] },
+    { rank: 'R3', name: 'チーズバーガー', ingredients: ['パン', 'チーズ', '肉'] },
+    { rank: 'R3', name: 'ピザ', ingredients: ['チーズ', 'トマト', '小麦粉'] },
+    { rank: 'R3', name: 'プルコギピザ', ingredients: ['チーズ', 'トマト', '小麦粉', '肉'] },
+    { rank: 'R3', name: 'パイナップルピザ', ingredients: ['チーズ', 'トマト', '小麦粉', 'パイナップル'] },
+    { rank: 'R3', name: '鶏むねサラダ', ingredients: ['レタス', 'トマト', '鶏肉'] },
+    { rank: 'R3', name: 'フィッシュアンドチップス', ingredients: ['魚', 'じゃがいも'] },
+    { rank: 'R3', name: 'トマトミートパスタ', ingredients: ['麺', 'トマト', '肉'] },
+    { rank: 'R3', name: 'チキングラタン', ingredients: ['チーズ', '鶏肉', 'じゃがいも'] },
+    { rank: 'R3', name: 'チキンパイ', ingredients: ['チーズ', '鶏肉', 'じゃがいも', '小麦粉'] },
+    { rank: 'R3', name: 'バターチキンカレー', ingredients: ['バター', 'カレー粉', '鶏肉', 'じゃがいも', 'トマト'] },
+    { rank: 'R3', name: '炒飯', ingredients: ['米', '肉', 'じゃがいも'] },
+    { rank: 'R3', name: 'サーモンステーキ', ingredients: ['魚', 'レタス', '玉ねぎ'] },
+    { rank: 'R3', name: 'フィッシュグラタン', ingredients: ['チーズ', '魚', 'じゃがいも'] },
+    { rank: 'R3', name: 'フィッシュスープ', ingredients: ['魚', 'じゃがいも', 'トマト', 'エビ'] },
+    { rank: 'R3', name: '揚げ餃子', ingredients: ['レタス', '肉', '小麦粉'] },
+    { rank: 'R3', name: 'チキンセット', ingredients: ['鶏肉', 'じゃがいも'] },
+    { rank: 'R3', name: '鶏とナッツの炒め物', ingredients: ['鶏肉', 'ニンニク', '玉ねぎ', '唐辛子'] },
+    { rank: 'R3', name: 'エビ揚げパン', ingredients: ['バター', '玉ねぎ', '卵', 'エビ', 'パン'] },
+    { rank: 'R3', name: 'チーズポテト卵パン', ingredients: ['パン', 'バター', 'チーズ', 'じゃがいも', '卵'] },
+    { rank: 'R3', name: 'トマトチーズパスタ', ingredients: ['麺', 'チーズ', 'トマト'] },
+    { rank: 'R3', name: 'パッタイ', ingredients: ['キノコ', '玉ねぎ', '卵', '麺', 'エビ'] },
+    { rank: 'R3', name: 'とんかつうどん', ingredients: ['キノコ', '卵', '海苔', '麺', '肉'] },
+    { rank: 'R3', name: 'チーズオーブンパスタ', ingredients: ['チーズ', '玉ねぎ', 'トマト', '麺'] },
+    { rank: 'R3', name: 'うなぎ握り', ingredients: ['米', '玉ねぎ', '魚', '海苔'] },
+    { rank: 'R3', name: 'フィッシュカツ定食', ingredients: ['米', 'レタス', '魚', '海苔'] },
+    { rank: 'R3', name: '男爵コロッケ', ingredients: ['パン', 'にんじん', 'じゃがいも', '卵'] },
+    { rank: 'R3', name: 'ポテトパンケーキ', ingredients: ['キノコ', '玉ねぎ', 'じゃがいも', '卵', '小麦粉'] },
+    { rank: 'R3', name: 'パイナップル串', ingredients: ['にんじん', 'キノコ', 'パイナップル'] },
+    { rank: 'R3', name: 'エビタコス', ingredients: ['パイナップル', '小麦粉', 'エビ'] },
+    { rank: 'R3', name: 'パイナップルサラダ', ingredients: ['レタス', 'パイナップル', 'トマト'] },
+    { rank: 'R3', name: 'パイナップルサーモンステーキ', ingredients: ['魚', 'レタス', '玉ねぎ', 'パイナップル'] },
+    { rank: 'R3', name: 'キャロットケーキ', ingredients: ['パン', 'バター', 'にんじん', 'パイナップル', '卵'] },
+    { rank: 'R3', name: 'キャロットスープ', ingredients: ['にんじん', 'ニンニク', '玉ねぎ'] },
+    { rank: 'R3', name: 'ピリ辛チーズフライドポテト', ingredients: ['チーズ', '唐辛子', 'じゃがいも'] },
+    { rank: 'R3', name: 'スパイシー炒飯', ingredients: ['麺', 'ニンニク', '唐辛子'] },
+    { rank: 'R3', name: 'チリチキン', ingredients: ['鶏肉', 'ニンニク', '唐辛子'] },
+    { rank: 'R3', name: 'カレーライス', ingredients: ['カレー粉', 'にんじん', 'ニンニク', '玉ねぎ', '米'] },
+    { rank: 'R3', name: 'きのこパスタ', ingredients: ['麺', 'バター', 'ニンニク', 'キノコ'] },
+    { rank: 'R3', name: 'きのこピザ', ingredients: ['チーズ', 'キノコ', '玉ねぎ', '小麦粉'] },
+    { rank: 'R3', name: 'マッシュルームパイ', ingredients: ['にんじん', 'ニンニク', 'キノコ', '小麦粉'] },
+    { rank: 'R2', name: '寿司', ingredients: ['米', '魚'] },
+    { rank: 'R2', name: 'ライスボール', ingredients: ['米', '海苔'] },
+    { rank: 'R2', name: '肉入りラーメン', ingredients: ['肉', '海苔', '麺'] },
+    { rank: 'R2', name: 'ソーセージドッグ', ingredients: ['パン', '肉'] },
+    { rank: 'R2', name: 'トマトパスタ', ingredients: ['麺', 'トマト'] },
+    { rank: 'R2', name: 'チーズフライドポテト', ingredients: ['チーズ', 'じゃがいも'] },
+    { rank: 'R2', name: 'トマトサラダ', ingredients: ['レタス', 'トマト'] },
+    { rank: 'R2', name: 'サンドイッチ', ingredients: ['パン', 'レタス', 'トマト'] },
+    { rank: 'R2', name: 'フィッシュカツ', ingredients: ['レタス', '魚'] },
+    { rank: 'R2', name: '焼き鳥', ingredients: ['鶏肉', 'じゃがいも'] },
+    { rank: 'R2', name: 'エビフライロール', ingredients: ['米', 'エビ', '海苔'] },
+    { rank: 'R2', name: 'ミートボール', ingredients: ['肉', 'トマト'] },
+    { rank: 'R2', name: 'ステーキ定食', ingredients: ['米', '肉'] },
+    { rank: 'R2', name: 'とんかつ定食', ingredients: ['米', '肉'] },
+    { rank: 'R2', name: 'ミートパイ', ingredients: ['チーズ', '肉', '小麦粉'] },
+    { rank: 'R2', name: '鶏の唐揚げ', ingredients: ['レタス', '鶏肉'] },
+    { rank: 'R2', name: 'タッカルビ', ingredients: ['鶏肉', '唐辛子'] },
+    { rank: 'R2', name: '水炊き', ingredients: ['鶏肉', '玉ねぎ'] },
+    { rank: 'R2', name: 'チキンカレー', ingredients: ['カレー粉', 'チーズ', '鶏肉'] },
+    { rank: 'R2', name: 'カツサンド', ingredients: ['パン', '肉'] },
+    { rank: 'R2', name: 'チーズポテトパン', ingredients: ['パン', 'チーズ', 'じゃがいも'] },
+    { rank: 'R2', name: 'チーズ焼うどん', ingredients: ['チーズ', '海苔', '麺'] },
+    { rank: 'R2', name: '揚げうどん', ingredients: ['エビ', '海苔', '麺'] },
+    { rank: 'R2', name: '肉丼', ingredients: ['米', '肉'] },
+    { rank: 'R2', name: '天丼', ingredients: ['米', 'エビ'] },
+    { rank: 'R2', name: 'エビ握り', ingredients: ['米', 'エビ'] },
+    { rank: 'R2', name: 'ポテトサラダ', ingredients: ['レタス', 'じゃがいも'] },
+    { rank: 'R2', name: 'フリッタータ', ingredients: ['チーズ', 'じゃがいも', '卵'] },
+    { rank: 'R2', name: 'じゃがいもスープ', ingredients: ['バター', '玉ねぎ', 'じゃがいも'] },
+    { rank: 'R2', name: 'パイナップルスコーン', ingredients: ['パイナップル', '小麦粉'] },
+    { rank: 'R2', name: 'パイナップルケーキ', ingredients: ['パン', 'バター', 'パイナップル', '卵'] },
+    { rank: 'R2', name: 'エビとパイナップルの炒め物', ingredients: ['パイナップル', 'エビ'] },
+    { rank: 'R2', name: 'パイナップルパンケーキ', ingredients: ['バター', 'パイナップル', '卵', '小麦粉'] },
+    { rank: 'R2', name: 'にんじんサラダ', ingredients: ['にんじん', 'レタス'] },
+    { rank: 'R2', name: 'キャロットクッキー', ingredients: ['バター', 'にんじん', '卵', '小麦粉'] },
+    { rank: 'R2', name: 'キャロットマフィン', ingredients: ['パン', 'バター', 'にんじん', '卵'] },
+    { rank: 'R2', name: 'キャロットパイ', ingredients: ['にんじん', '卵', '小麦粉'] },
+    { rank: 'R2', name: 'スパイシークラッカー', ingredients: ['バター', '唐辛子', '小麦粉'] },
+    { rank: 'R2', name: 'ガーリックエビチリ', ingredients: ['ニンニク', '唐辛子', 'エビ'] },
+    { rank: 'R2', name: 'チリエッグトースト', ingredients: ['パン', '唐辛子', '卵'] },
+    { rank: 'R2', name: 'パンケーキ', ingredients: ['バター', '卵', '小麦粉'] },
+    { rank: 'R2', name: 'クラッカー', ingredients: ['バター', '卵', '小麦粉'] },
+    { rank: 'R2', name: 'ナン', ingredients: ['バター', 'ニンニク', '小麦粉'] },
+    { rank: 'R2', name: 'スパイシーカレー', ingredients: ['カレー粉', '唐辛子'] },
+    { rank: 'R2', name: 'トマトカレー', ingredients: ['カレー粉', 'トマト'] },
+    { rank: 'R2', name: 'きのこカレー', ingredients: ['カレー粉', 'キノコ'] },
+    { rank: 'R2', name: 'カレーパスタ', ingredients: ['麺', 'カレー粉', 'にんじん'] },
+    { rank: 'R2', name: 'きのこスープ', ingredients: ['ニンニク', 'キノコ'] },
+    { rank: 'R2', name: 'ガーリックパン', ingredients: ['パン', 'ニンニク'] },
+    { rank: 'R2', name: 'ガーリックシュリンプ', ingredients: ['ニンニク', 'エビ'] },
+    { rank: 'R2', name: 'ガリバタサーモン', ingredients: ['バター', '魚', 'ニンニク'] },
+    { rank: 'R2', name: 'シュリンプパスタ', ingredients: ['麺', 'ニンニク', 'エビ'] }
+];
+
+let selectedIngredients = new Set();
+
+function getIngColor(ingName) {
+    const group = ingredientGroups.find(g => g.items.includes(ingName));
+    return group ? group.color : '';
+}
+
+function init() {
+    const mainContainer = document.getElementById('ingredient-container');
+    ingredientGroups.forEach(group => {
+        const row = document.createElement('div');
+        row.className = 'ingredient-group-row';
+        group.items.forEach(item => {
+            const btn = document.createElement('button');
+            btn.className = `ing-btn ${group.color}`;
+            btn.textContent = item;
+            btn.onclick = () => toggleIngredient(item);
+            btn.dataset.name = item;
+            row.appendChild(btn);
+        });
+        mainContainer.appendChild(row);
+    });
+
+    document.querySelectorAll('.hide-filter').forEach(cb => {
+        cb.onchange = render;
+    });
+
+    document.getElementById('clear-btn').onclick = clearIngredients;
+    render();
+}
+
+function toggleIngredient(name) {
+    if (selectedIngredients.has(name)) {
+        selectedIngredients.delete(name);
+    } else {
+        selectedIngredients.add(name);
+    }
+    updateButtons();
+    render();
+}
+
+function clearIngredients() {
+    selectedIngredients.clear();
+    updateButtons();
+    render();
+}
+
+function updateButtons() {
+    document.querySelectorAll('.ing-btn').forEach(btn => {
+        if (selectedIngredients.has(btn.dataset.name)) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function render() {
+    const listContainer = document.getElementById('dish-list');
+    const iconContainer = document.getElementById('selected-icons');
+    listContainer.innerHTML = '';
+    iconContainer.innerHTML = '';
+
+    // 選択アイコン表示
+    selectedIngredients.forEach(name => {
+        const badge = document.createElement('div');
+        badge.className = `selected-badge ${getIngColor(name)}`;
+        badge.textContent = name;
+        iconContainer.appendChild(badge);
+    });
+
+    const activeHideFilters = Array.from(document.querySelectorAll('.hide-filter:checked')).map(cb => parseInt(cb.value));
+    
+    // フィルタリングと描画
+    const filteredDishes = dishes.filter(dish => {
+        for (let limit of activeHideFilters) {
+            if (dish.ingredients.length <= limit) return false;
+        }
+        if (selectedIngredients.size > 0) {
+            for (let needed of selectedIngredients) {
+                if (!dish.ingredients.includes(needed)) return false;
+            }
+        }
+        return true;
+    });
+
+    filteredDishes.forEach(dish => {
+        const card = document.createElement('div');
+        card.className = 'dish-card';
+        const rankClass = `rank-${dish.rank.toLowerCase()}`;
+        
+        // 重要：素材をマスタの順序通りに並べ替える
+        const sortedIngs = [...dish.ingredients].sort((a, b) => {
+            return ingredientMasterOrder.indexOf(a) - ingredientMasterOrder.indexOf(b);
+        });
+
+        // ハイライト処理
+        const ingredientsHtml = sortedIngs.map(ing => {
+            if (selectedIngredients.has(ing)) {
+                return `<span class="highlight">${ing}</span>`;
+            }
+            return ing;
+        }).join('、');
+
+        card.innerHTML = `
+            <div class="rank-badge ${rankClass}">${dish.rank}</div>
+            <div class="dish-info">
+                <div class="dish-name">${dish.name}</div>
+                <div class="dish-ings">${ingredientsHtml}</div>
+            </div>
+        `;
+        listContainer.appendChild(card);
+    });
+
+    if (filteredDishes.length === 0) {
+        listContainer.innerHTML = '<p style="font-size:12px; color: #999; grid-column: 1/-1; text-align: center; margin-top: 20px;">条件に合う料理がありません</p>';
+    }
+}
+
+window.onload = init;
+</script>
+
 </body>
 </html>
